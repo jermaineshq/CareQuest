@@ -184,7 +184,6 @@
             opacity: 1;
         }
 
-        /* This copy is for the visual effect only; it cannot receive input. */
         #peripheralBlurContent {
             position: absolute;
             top: 0;
@@ -233,7 +232,7 @@
             justify-content: space-evenly;
         }
 
-        /* Keep the mask centred. Blur before warping so its uneven edge still shows. */
+        /* Keep the mask centred. Blur before warping so uneven edge still shows. */
         #occlusionMask {
             position: absolute;
             top: 0;
@@ -273,7 +272,7 @@
                             transparent 100%);
         }
 
-        /* Do not let the shelf show through before the task starts. */
+        /* Block view before start of game. */
         #startOverlay {
             background: #000000;
         }
@@ -410,7 +409,7 @@
         }
         CQ.applyHighContrast();
         
-        // Build the clickable shelf first; the other two shelves are visual copies only.
+        // Build the clickable shelf first.
         function populateMedicineShelf() {
           medicineShelf.innerHTML = "";
           const shelfBoard = document.createElement('div');
@@ -525,7 +524,6 @@
           moveShelfLayers(nextShelfOffset);
         });
         
-        // Use elapsed time for the countdown and stop when the task is no longer active.
         function updateTaskTimer() {
           if (!isTaskActive) {
             return;
@@ -542,7 +540,7 @@
           requestAnimationFrame(updateTaskTimer);
         }
         
-        // Practical tips are based on Macular Society guides; keeping things in place is Auntie Lim's request.
+        // Practical tips are based on Macular Society guides. Keeping things in place is Auntie Lim's request.
         CQ.setupReflection({
           key: 'macular',
           npc: 'auntie',
