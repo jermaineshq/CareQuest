@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CareQuest - Sensory Overload Sim</title>
+    <link rel="stylesheet" href="carequest_shared.css">
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+            background: #f0f0f0;
+            color: #333;
+            user-select: none;
+        }
+
+        body.high-contrast {
+            background: #000000;
+            color: #ffffff;
+        }
+
+        body.high-contrast button {
+            background: #fff;
+            color: #000;
+        }
+
+        button {
+            padding: 10px 15px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        textarea {
+            width: 100%;
+            max-width: 950px;
+            height: 100px;
+            margin-top: 10px;
+        }
+
+        #timerWidget {
+            font-family: monospace;
+            font-size: 14px;
+            font-weight: bold;
+            padding: 10px;
+            background: #eaeaea;
+            border-left: 5px solid #2980b9;
+            width: 160px;
+        }
+
+        /* Keep the timer above the activity, inside its game box. */
+        .timer-strip {
+            padding: 8px;
+        }
+
+        body.high-contrast #timerWidget {
+            background: #222;
+            border-left: 5px solid #fff;
+            color: #fff;
+        }
+
+        #simFrame {
+            position: relative;
+            width: 960px;
+            max-width: 100%;
+            overflow: hidden;
+        }
+
+        /* Only start the flicker when the search is actually running. */
+        #simFrame.running {
+            animation: flicker 2.4s infinite;
+        }
+
+        #shopCanvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+
+        @keyframes flicker {
+            0%, 100% {
+                filter: brightness(1);
+            }
+            48% {
+                filter: brightness(1);
+            }
+            50% {
+                filter: brightness(0.75);
+            }
+            52% {
+                filter: brightness(1);
+            }
+            75% {
+                filter: brightness(1);
+            }
+            77% {
+                filter: brightness(0.85);
+            }
+            79% {
+                filter: brightness(1);
+            }
+        }
+
+        /* The static overlay is visual only and does not block clicks. */
+        #visualSnow {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            opacity: 0.16;
+            mix-blend-mode: overlay;
+            display: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+            animation: snowJitter 0.12s steps(2) infinite;
+        }
+
+        #simFrame.running #visualSnow {
+            display: block;
+        }
+
+        @keyframes snowJitter {
+            0% {
+                transform: translate(0, 0);
+            }
+            100% {
+                transform: translate(-2px, 1px);
+            }
+        }
+
+        /* Reuse the start card for the short countdown. */
+        #getReadyOverlay .cq-count {
+            font-size: 30px;
+            font-weight: bold;
+        }
+
+        /* Chatter sits over the map without taking input. */
+        #distractionLayer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            font-size: 17px;
+            font-weight: 600;
+            color: rgba(0,0,0,0.65);
+            font-style: italic;
+        }
+
+        body.high-contrast #distractionLayer {
+            color: rgba(255,255,255,0.75);
+        }
+
+        .whisper {
+            position: absolute;
+            animation: fadeDrift 1.8s linear forwards;
+            text-shadow: 0 0 6px rgba(255,255,255,0.9), 0 0 3px rgba(255,255,255,0.9);
+            max-width: 240px;
+        }
+
+        body.high-contrast .whisper {
+            text-shadow: 0 0 6px rgba(0,0,0,0.9), 0 0 3px rgba(0,0,0,0.9);
+        }
+
+        @keyframes fadeDrift {
+            0% {
+                opacity: 0;
+                transform: translateY(0) scale(0.9);
+            }
+            15% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(-15px);
+            }
+        }
+
+        /* Brief feedback appears near the top of the shop. */
+        #shopMessage {
+            position: absolute;
+            left: 50%;
+            top: 12px;
+            transform: translateX(-50%);
+            background: rgba(192, 57, 43, 0.92);
+            color: #fff;
+            font-weight: bold;
+            padding: 6px 14px;
+            border-radius: 6px;
+            z-index: 4;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Start in the walking scene before opening the room activity. -->
+    <section id="world" class="cq-gamebox" aria-label="Little Theo's room">
+        <div class="cq-toolbar">
+            <h1 class="cq-title">Little Theo's room</h1>
+            <a href="hallway.html">&larr; Hallway</a>
+            <button onclick="CQ.toggleHighContrast()">High contrast</button>
+        </div>
+        <div class="cq-stage">
+            <canvas id="worldCanvas" width="320" height="176" tabindex="0"
+                aria-label="Pixel art room with a bed, a kitchen, a sofa, a TV and a tablet on the coffee table. Little Theo stands by the sofa. The prompt below the map describes what is next to you."></canvas>
+            <div id="worldDialogue" class="cq-overlay" hidden></div>
+        </div>
+        <div class="cq-hud">
+            <p id="worldPrompt" class="cq-prompt" aria-live="polite"></p>
+            <p class="cq-controls">WASD or arrow keys: move. Enter: talk. Red mat + Enter: back to the hallway.</p>
+        </div>
+    </section>
+
+    <!-- The conversation reveals this activity. It stays hidden at first. -->
+    <div id="activity" hidden>
+
+    <div class="cq-gamebox">
+        <div class="cq-toolbar">
+            <h1 class="cq-title">Find Mum in the supermarket</h1>
+            <a href="hallway.html">&larr; Hallway</a>
+            <button onclick="toggleHighContrast()">High contrast</button>
+            <button id="muteBtn" aria-pressed="false" onclick="toggleMute()">Mute sound</button>
+            
+            <button id="skipBtn" onclick="skipTask()">Skip task</button>
+        </div>
+
+        <div class="cq-play">
+            <div class="timer-strip"><div id="timerWidget">Time Left: 45.0s</div></div>
+
+            <div id="simFrame">
+                <canvas id="shopCanvas" width="320" height="176" tabindex="0"
+                    aria-label="Pixel art supermarket with shelves and moving shoppers. You are Theo. The line under the map says who is next to you."></canvas>
+                <div id="distractionLayer"></div>
+                <div id="visualSnow"></div>
+                <div id="shopMessage" hidden></div>
+            </div>
+            <div id="shopDialogue" hidden></div>
+
+            <div class="cq-hud">
+                <p id="shopPrompt" class="cq-prompt" aria-live="polite"></p>
+                <p class="cq-controls">WASD or arrow keys: walk. Enter next to someone: check if it's Mum.</p>
+            </div>
+
+            <div id="getReadyOverlay" class="cq-card">
+                <h2>You are Theo. Find Mum!</h2>
+                <p>Mum is wearing her <strong>purple top</strong> and carrying her <strong>red bag</strong>.
+                Some shoppers have one of those, only Mum has both. The shop is loud and bright, and people keep moving.
+                You have 45 seconds, and checking the wrong person costs 3.</p>
+                <p class="cq-warn">Warning: flickering light and loud sounds. You can mute or skip at the top.</p>
+                <p class="cq-keys">WASD or arrow keys to walk, Enter next to someone to check if it's Mum.</p>
+                <button id="startBtn" onclick="startTask()">Start</button>
+            </div>
+        </div>
+
+        <!-- All three reflection stages use this same part of the game box. -->
+        <div class="cq-reflect" id="reflectionSection" style="display:none;">
+            <div id="stage1">
+                <h3>Reflection 1 of 3: Your thoughts</h3>
+                <p id="resultMessage" class="cq-result"></p>
+                <div class="cq-ask">
+                    <div class="cq-bubble">
+                        <p class="cq-name">Little Theo</p>
+                        <p>That's what the shops are like for me every time, not just for 45 seconds.</p>
+                        <p><label for="reflectionInput"><strong>What did the noise, the flicker and the crowd do to your search for Mum?</strong></label></p>
+                        <textarea id="reflectionInput" placeholder="Type your answer here..."></textarea>
+                        <button id="submitReflection">Next</button>
+                    </div>
+                </div>
+            </div>
+            <div id="stage2" hidden></div>
+            <div id="stage3" hidden></div>
+        </div>
+    </div>
+
+    </div>
+
+    <script src="carequest_shared.js"></script>
+    <script src="carequest_world.js"></script>
+    <script>
+        const sceneFrame = document.getElementById('simFrame');
+        const timerDisplay = document.getElementById('timerWidget');
+        const resultDisplay = document.getElementById('resultMessage');
+        const chatterLayer = document.getElementById('distractionLayer');
+        const countdownOverlay = document.getElementById('getReadyOverlay');
+        const shopNotice = document.getElementById('shopMessage');
+        
+        // These lines appear over the shop while the search is running.
+        const shopChatter = [
+          "...clean up on aisle three...",
+          "...buy one get one free...",
+          "...excuse me, can I get past...",
+          "...have you got a loyalty card...",
+          "...where did your mum go...",
+          "...beep... beep... beep...",
+          "...shop closes in fifteen minutes...",
+          "...did you take your pills yet..."
+        ];
+        let isTaskActive = false;
+        let taskStartedAt = null;
+        let penaltySeconds = 0;
+        let wrongChecks = 0;
+        let collisionCount = 0;
+        let wasSkipped = false;
+        const TASK_DURATION_SECONDS = 45;
+        let supermarketEngine = null;
+        let audioContext = null;
+        let ambientNoiseSource = null;
+        
+        // All sound goes through one gain node so mute works on everything.
+        let masterVolume = null;
+        let isMuted = false;
+        function toggleHighContrast() {
+          CQ.toggleHighContrast();
+        }
+        CQ.applyHighContrast();
+        function toggleMute() {
+          isMuted = !isMuted;
+          if (masterVolume) {
+            masterVolume.gain.value = isMuted ? 0 : 1;
+          }
+          const actionButton = document.getElementById('muteBtn');
+          actionButton.textContent = isMuted ? 'Unmute sound' : 'Mute sound';
+          actionButton.setAttribute('aria-pressed', isMuted ? 'true' : 'false');
+        }
+        
+        // Make the background hiss and shop sounds with Web Audio, without sound files.
+        function startShopAudio() {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          masterVolume = audioContext.createGain();
+          masterVolume.gain.value = isMuted ? 0 : 1;
+          masterVolume.connect(audioContext.destination);
+          const sampleCount = 2 * audioContext.sampleRate;
+          const ambientBuffer = audioContext.createBuffer(1, sampleCount, audioContext.sampleRate);
+          const noiseSamples = ambientBuffer.getChannelData(0);
+          for (let i = 0; i < sampleCount; i++) {
+            noiseSamples[i] = Math.random() * 2 - 1;
+          }
+          ambientNoiseSource = audioContext.createBufferSource();
+          ambientNoiseSource.buffer = ambientBuffer;
+          ambientNoiseSource.loop = true;
+          const gain = audioContext.createGain();
+          gain.gain.value = 0.04;
+          ambientNoiseSource.connect(gain).connect(masterVolume);
+          ambientNoiseSource.start();
+          scheduleScannerBeep();
+          setTimeout(scheduleAnnouncementChime, 3000);
+        }
+        function playTone(freq, length, volume, type) {
+          if (!audioContext) {
+            return;
+          }
+          const oscillator = audioContext.createOscillator();
+          const g = audioContext.createGain();
+          oscillator.type = type || 'sine';
+          oscillator.frequency.value = freq;
+          g.gain.value = volume;
+          oscillator.connect(g).connect(masterVolume);
+          oscillator.start();
+          oscillator.stop(audioContext.currentTime + length);
+        }
+        
+        // Leave a random gap between scanner beeps.
+        function scheduleScannerBeep() {
+          if (!isTaskActive || !audioContext) {
+            return;
+          }
+          playTone(1100 + Math.random() * 400, 0.07, 0.05);
+          setTimeout(scheduleScannerBeep, 400 + Math.random() * 700);
+        }
+        
+        // Play the two notes, then schedule the next announcement sound.
+        function scheduleAnnouncementChime() {
+          if (!isTaskActive || !audioContext) {
+            return;
+          }
+          playTone(880, 0.35, 0.06);
+          setTimeout(() => playTone(698, 0.45, 0.06), 350);
+          setTimeout(scheduleAnnouncementChime, 6000 + Math.random() * 3000);
+        }
+        
+        // A short fading burst plays for a collision or a wrong check.
+        function playCollisionNoise() {
+          if (!audioContext) {
+            return;
+          }
+          const burstLength = Math.floor(audioContext.sampleRate * 0.25);
+          const burstBuffer = audioContext.createBuffer(1, burstLength, audioContext.sampleRate);
+          const d = burstBuffer.getChannelData(0);
+          for (let i = 0; i < burstLength; i++) {
+            d[i] = (Math.random() * 2 - 1) * (1 - i / burstLength);
+          }
+          const burstSource = audioContext.createBufferSource();
+          burstSource.buffer = burstBuffer;
+          const g = audioContext.createGain();
+          g.gain.value = 0.18;
+          burstSource.connect(g).connect(masterVolume);
+          burstSource.start();
+        }
+        
+        // The source might already be stopped when the task is skipped.
+        function stopShopAudio() {
+          if (ambientNoiseSource) {
+            try {
+              ambientNoiseSource.stop();
+            } catch (event) {}
+          }
+          if (audioContext) {
+            audioContext.close();
+            audioContext = null;
+          }
+        }
+        
+        // Remove each line after its animation and queue another while the task is active.
+        function showChatter() {
+          if (!isTaskActive) {
+            return;
+          }
+          const chatterElement = document.createElement('div');
+          chatterElement.className = 'whisper';
+          chatterElement.textContent = shopChatter[Math.floor(Math.random() * shopChatter.length)];
+          chatterElement.style.left = Math.random() * 70 + '%';
+          chatterElement.style.top = Math.random() * 80 + '%';
+          chatterLayer.appendChild(chatterElement);
+          setTimeout(() => chatterElement.remove(), 1900);
+          setTimeout(showChatter, 800 + Math.random() * 900);
+        }
+        let noticeTimeout = null;
+        function showShopNotice(text) {
+          shopNotice.textContent = text;
+          shopNotice.hidden = false;
+          clearTimeout(noticeTimeout);
+          noticeTimeout = setTimeout(() => {
+            shopNotice.hidden = true;
+          }, 1200);
+        }
+        
+        // Build the shop now, but keep everyone paused until the countdown finishes.
+        function startTask() {
+          if (isTaskActive || wasSkipped) {
+            return;
+          }
+          isTaskActive = true;
+          wrongChecks = 0;
+          collisionCount = 0;
+          penaltySeconds = 0;
+          startShopAudio();
+          supermarketEngine = CQWorld.shop({
+            canvas: document.getElementById('shopCanvas'),
+            overlay: document.getElementById('shopDialogue'),
+            prompt: document.getElementById('shopPrompt'),
+            onCheck: checkShopper,
+            onBump: handleShopperCollision
+          });
+          supermarketEngine.setPaused(true);
+          let countdownValue = 2;
+          countdownOverlay.innerHTML = '<p class="cq-count">Get ready... ' + countdownValue + '</p>';
+          const countdownInterval = setInterval(() => {
+            countdownValue -= 1;
+            if (countdownValue > 0) {
+              countdownOverlay.innerHTML = '<p class="cq-count">Get ready... ' + countdownValue + '</p>';
+            } else {
+              clearInterval(countdownInterval);
+              if (wasSkipped) {
+                return;
+              }
+              countdownOverlay.hidden = true;
+              sceneFrame.classList.add('running');
+              supermarketEngine.setPaused(false);
+              document.getElementById('shopCanvas').focus({
+                preventScroll: true
+              });
+              taskStartedAt = Date.now();
+              showChatter();
+              updateTaskTimer();
+            }
+          }, 700);
+        }
+        
+        // A wrong check adds three seconds to the time used by the search.
+        function checkShopper(isMum) {
+          if (!isTaskActive || !taskStartedAt) {
+            return;
+          }
+          if (isMum) {
+            finishSearch(true);
+          } else {
+            wrongChecks += 1;
+            penaltySeconds += 3;
+            playCollisionNoise();
+            showShopNotice("That's not Mum!");
+          }
+        }
+        let lastCollisionAt = 0;
+        
+        // Wait 800 ms between bumps so holding a key does not keep firing the sound.
+        function handleShopperCollision() {
+          if (!isTaskActive || !taskStartedAt) {
+            return;
+          }
+          const now = Date.now();
+          if (now - lastCollisionAt < 800) {
+            return;
+          }
+          lastCollisionAt = now;
+          collisionCount += 1;
+          playCollisionNoise();
+          showShopNotice('Watch where you\'re going!');
+        }
+        
+        // Stop the effects before opening the reflection and reporting the result.
+        function finishSearch(found) {
+          isTaskActive = false;
+          sceneFrame.classList.remove('running');
+          if (supermarketEngine) {
+            supermarketEngine.setPaused(true);
+          }
+          stopShopAudio();
+          document.getElementById('skipBtn').disabled = true;
+          const elapsedSeconds = ((Date.now() - taskStartedAt) / 1000 + penaltySeconds).toFixed(1);
+          if (found) {
+            resultDisplay.textContent = wrongChecks === 0 ? `You found Mum in ${elapsedSeconds}s, first try.` : `You found Mum in ${elapsedSeconds}s, after checking ${wrongChecks} wrong ${wrongChecks === 1 ? 'person' : 'people'}.`;
+          } else {
+            resultDisplay.textContent = `Time ran out before you found Mum. You checked ${wrongChecks} wrong ${wrongChecks === 1 ? 'person' : 'people'} and bumped into people ${collisionCount} times.`;
+          }
+          CQ.showReflection();
+        }
+        function skipTask() {
+          if (wasSkipped) {
+            return;
+          }
+          if (!confirm('Skip the supermarket task and go to the reflection?')) {
+            return;
+          }
+          wasSkipped = true;
+          isTaskActive = false;
+          sceneFrame.classList.remove('running');
+          if (supermarketEngine) {
+            supermarketEngine.setPaused(true);
+          }
+          stopShopAudio();
+          countdownOverlay.hidden = true;
+          CQ.save('carequest_sensory_skipped', 'true');
+          document.getElementById('skipBtn').disabled = true;
+          resultDisplay.textContent = "You skipped the task. That's okay. Think about what you felt before you stopped.";
+          CQ.showReflection();
+        }
+        
+        // Use elapsed time for the countdown and stop when the task is no longer active.
+        function updateTaskTimer() {
+          if (!isTaskActive) {
+            return;
+          }
+          const elapsedSeconds = (Date.now() - taskStartedAt) / 1000 + penaltySeconds;
+          const remainingSeconds = Math.max(0, TASK_DURATION_SECONDS - elapsedSeconds);
+          timerDisplay.textContent = `Time Left: ${remainingSeconds.toFixed(1)}s`;
+          if (remainingSeconds <= 0) {
+            finishSearch(false);
+            return;
+          }
+          requestAnimationFrame(updateTaskTimer);
+        }
+        
+        // Sensory tips are based on the National Autistic Society; the request for time to answer is Theo's.
+        CQ.setupReflection({
+          key: 'sensory',
+          npc: 'theo',
+          video: {
+            id: 'aPknwW8mPAM',
+            title: 'Can you make it to the end?',
+            credit: 'National Autistic Society on YouTube',
+            intro: 'A short film by the National Autistic Society showing a trip to a shopping centre from an autistic person\'s point of view. ' + 'Heads up: it has loud sound and flashing images, like the supermarket you just played.'
+          },
+          coping: [
+            "That's what the shops feel like to me. Everything shouts at the same time.",
+            "My ear defenders help. When I wear them the noise gets smaller.",
+            "When it's too much I need to go to a quiet corner. Please let me go. I'm not being naughty.",
+            "Tell me before things change, like if we have to go to the shops after school. Surprises make the noise feel louder.",
+            "And give me time to answer. Too many words at once is like the noise.",
+            "Thanks for helping me find Mum. Bye!"
+          ]
+        });
+    </script>
+    <script>
+        // Show the walking room first. The conversation opens the activity.
+        CQWorld.room({
+          key: 'sensory',
+          npc: 'theo',
+          theme: 'sensory',
+          canvas: document.getElementById('worldCanvas'),
+          overlay: document.getElementById('worldDialogue'),
+          prompt: document.getElementById('worldPrompt'),
+          world: document.getElementById('world'),
+          activity: document.getElementById('activity'),
+          intro: [
+            "Hi. Mum's taking me to the supermarket later.",
+            "It's always so loud and bright in there, and sometimes I lose her.",
+            "Can you be me for a bit? Find Mum in the shop. That's Auntie Lim. She'll be wearing her purple top and carrying her red bag."
+          ]
+        });
+    </script>
+</body>
+</html>

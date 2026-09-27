@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CareQuest - Macular Degeneration Sim</title>
+    <link rel="stylesheet" href="carequest_shared.css">
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+            background: #f0f0f0;
+            color: #333;
+            user-select: none;
+        }
+
+        body.high-contrast {
+            background: #000000;
+            color: #ffffff;
+        }
+
+        body.high-contrast #simFrame {
+            background: #000000;
+        }
+
+        body.high-contrast .bottle .label {
+            background: #000000;
+            color: #ffff00;
+            border-color: #ffffff;
+            font-size: 9.5px;
+        }
+
+        body.high-contrast .bottle .body {
+            border: 2px solid #ffffff;
+        }
+
+        body.high-contrast .bottle .cap {
+            background: #ffffff;
+        }
+
+        body.high-contrast .shelfBoard {
+            background: #ffffff;
+        }
+
+        body.high-contrast button {
+            background: #fff;
+            color: #000;
+        }
+
+        button {
+            padding: 10px 15px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        textarea {
+            width: 100%;
+            max-width: 950px;
+            height: 100px;
+            margin-top: 10px;
+        }
+
+        /* Keep the timer above the activity, inside its game box. */
+        .timer-strip {
+            padding: 8px;
+        }
+
+        #timerWidget {
+            font-family: monospace;
+            font-size: 14px;
+            font-weight: bold;
+            padding: 10px;
+            background: #eaeaea;
+            border-left: 5px solid #2980b9;
+            width: 160px;
+        }
+
+        body.high-contrast #timerWidget {
+            background: #222;
+            border-left: 5px solid #fff;
+            color: #fff;
+        }
+
+        #simFrame {
+            position: relative;
+            width: 950px;
+            max-width: 100%;
+            height: 350px;
+            margin: 0 auto;
+            background: #ffffff;
+            overflow: hidden;
+        }
+
+        /* This wider shelf moves under the masks, which stay in the centre. */
+        #shelfContent {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 1300px;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-evenly;
+            will-change: transform;
+        }
+
+        /* The board belongs to the moving shelf, not the fixed overlays. */
+        .shelfBoard {
+            position: absolute;
+            left: 0;
+            width: 1300px;
+            top: 225px;
+            height: 9px;
+            background: linear-gradient(#a06a3a, #6b4423);
+            box-shadow: 0 3px 4px rgba(0,0,0,0.35);
+        }
+
+        /* Leave space around each bottle rather than filling the whole shelf slot. */
+        .bottle {
+            position: relative;
+            width: 66px;
+            height: 100px;
+            cursor: pointer;
+            flex: none;
+        }
+
+        .bottle .cap {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 46px;
+            height: 15px;
+            background: #ecf0f1;
+            border: 1px solid #b2bec3;
+            border-radius: 4px 4px 0 0;
+        }
+
+        .bottle .body {
+            position: absolute;
+            top: 13px;
+            left: 0;
+            width: 66px;
+            height: 87px;
+            border: 1px solid rgba(0,0,0,0.25);
+            border-radius: 4px 4px 10px 10px;
+            box-shadow: inset -6px 0 10px rgba(0,0,0,0.18), inset 5px 0 6px rgba(255,255,255,0.25);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .bottle .label {
+            width: 52px;
+            background: #fff;
+            border: 1px solid #ccc;
+            border-radius: 2px;
+            padding: 3px 2px;
+            font-size: 8.5px;
+            font-weight: bold;
+            line-height: 1.1;
+            text-align: center;
+            color: #222;
+        }
+
+        /* Only reveal the blurred copy around the outside of the view. */
+        #peripheralBlurMask {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+            opacity: 0;
+            transition: opacity 0.3s;
+            mask-image: radial-gradient(ellipse var(--occlusion-radius-x, 210px) var(--occlusion-radius-y, 150px) at 50% 50%,
+                        transparent 0%, transparent 75%, rgba(0,0,0,0.92) 170%);
+            -webkit-mask-image: radial-gradient(ellipse var(--occlusion-radius-x, 210px) var(--occlusion-radius-y, 150px) at 50% 50%,
+                        transparent 0%, transparent 75%, rgba(0,0,0,0.92) 170%);
+        }
+
+        #peripheralBlurMask.active {
+            opacity: 1;
+        }
+
+        /* This copy is for the visual effect only; it cannot receive input. */
+        #peripheralBlurContent {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 1300px;
+            height: 100%;
+            filter: blur(5px) saturate(0.35) contrast(0.85);
+            will-change: transform;
+        }
+
+        /* Limit the warped copy to a ring around the central mask. */
+        #metamorphRing {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+            opacity: 0;
+            transition: opacity 0.3s;
+            mask-image: radial-gradient(ellipse var(--occlusion-radius-x, 210px) var(--occlusion-radius-y, 150px) at 50% 50%,
+                        transparent 0%, transparent 40%, rgba(0,0,0,0.95) 70%, rgba(0,0,0,0.95) 118%, transparent 155%);
+            -webkit-mask-image: radial-gradient(ellipse var(--occlusion-radius-x, 210px) var(--occlusion-radius-y, 150px) at 50% 50%,
+                        transparent 0%, transparent 40%, rgba(0,0,0,0.95) 70%, rgba(0,0,0,0.95) 118%, transparent 155%);
+        }
+
+        #metamorphRing.active {
+            opacity: 1;
+        }
+
+        #metamorphRingContent {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 1300px;
+            height: 100%;
+            filter: url(#metamorphWarp);
+            will-change: transform;
+        }
+
+        /* The copies need the same flex layout as the real shelf. */
+        #peripheralBlurContent, #metamorphRingContent {
+            display: flex;
+            align-items: center;
+            justify-content: space-evenly;
+        }
+
+        /* Keep the mask centred. Blur before warping so its uneven edge still shows. */
+        #occlusionMask {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            background:
+                        radial-gradient(circle 40px at calc(50% - 70px) calc(50% - 45px), rgba(140,140,140,0.5), transparent 70%),
+                        radial-gradient(circle 45px at calc(50% + 75px) calc(50% + 40px), rgba(140,140,140,0.45), transparent 70%),
+                        radial-gradient(circle 32px at calc(50% - 45px) calc(50% + 55px), rgba(150,150,150,0.55), transparent 70%),
+                        radial-gradient(circle 36px at calc(50% + 65px) calc(50% - 55px), rgba(140,140,140,0.4), transparent 70%),
+                        radial-gradient(ellipse var(--occlusion-radius-x, 210px) var(--occlusion-radius-y, 150px) at 50% 50%,
+                            rgba(80,80,80,0.97) 0%,
+                            rgba(80,80,80,0.92) 65%,
+                            rgba(80,80,80,0.52) 85%,
+                            transparent 100%);
+            filter: blur(10px) url(#scotomaEdge);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        #occlusionMask.active {
+            opacity: 1;
+        }
+
+        body.high-contrast #occlusionMask {
+            background:
+                        radial-gradient(circle 40px at calc(50% - 70px) calc(50% - 45px), rgba(70,70,70,0.5), transparent 70%),
+                        radial-gradient(circle 45px at calc(50% + 75px) calc(50% + 40px), rgba(70,70,70,0.45), transparent 70%),
+                        radial-gradient(circle 32px at calc(50% - 45px) calc(50% + 55px), rgba(80,80,80,0.55), transparent 70%),
+                        radial-gradient(circle 36px at calc(50% + 65px) calc(50% - 55px), rgba(70,70,70,0.4), transparent 70%),
+                        radial-gradient(ellipse var(--occlusion-radius-x, 210px) var(--occlusion-radius-y, 150px) at 50% 50%,
+                            rgba(20,20,20,0.97) 0%,
+                            rgba(20,20,20,0.93) 65%,
+                            rgba(20,20,20,0.55) 85%,
+                            transparent 100%);
+        }
+
+        /* Do not let the shelf show through before the task starts. */
+        #startOverlay {
+            background: #000000;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Start in the walking scene before opening the room activity. -->
+    <section id="world" class="cq-gamebox" aria-label="Auntie Lim's room">
+        <div class="cq-toolbar">
+            <h1 class="cq-title">Auntie Lim's room</h1>
+            <a href="hallway.html">&larr; Hallway</a>
+            <button onclick="CQ.toggleHighContrast()">High contrast</button>
+        </div>
+        <div class="cq-stage">
+            <canvas id="worldCanvas" width="320" height="176" tabindex="0"
+                aria-label="Pixel art room with a bed, a kitchen, a sofa and a medicine shelf full of pill bottles. Auntie Lim stands by the shelf. The prompt below the map describes what is next to you."></canvas>
+            <div id="worldDialogue" class="cq-overlay" hidden></div>
+        </div>
+        <div class="cq-hud">
+            <p id="worldPrompt" class="cq-prompt" aria-live="polite"></p>
+            <p class="cq-controls">WASD or arrow keys: move. Enter: talk. Red mat + Enter: back to the hallway.</p>
+        </div>
+    </section>
+
+    <!-- The conversation reveals this activity. It stays hidden at first. -->
+    <div id="activity" hidden>
+
+    <div class="cq-gamebox">
+        <div class="cq-toolbar">
+            <h1 class="cq-title">Auntie Lim's shelf</h1>
+            <a href="hallway.html">&larr; Hallway</a>
+            <button onclick="toggleHighContrast()">High contrast</button>
+        </div>
+
+        <div class="cq-play">
+            <div class="timer-strip"><div id="timerWidget">Time Left: 25.0s</div></div>
+
+            <!-- Only the real shelf accepts input. The two copies just supply the effects. -->
+            <div id="simFrame" tabindex="-1">
+                <div id="shelfContent" inert></div>
+                <div id="metamorphRing" inert aria-hidden="true"><div id="metamorphRingContent"></div></div>
+                <div id="peripheralBlurMask" inert aria-hidden="true"><div id="peripheralBlurContent"></div></div>
+                <div id="occlusionMask"></div>
+            </div>
+
+            <div id="startOverlay" class="cq-card">
+                <h2>Find Auntie Lim's Amoxicillin 500mg</h2>
+                <p>The middle of your view is blocked and the edges are blurry, like Auntie Lim's eyes.
+                Move the mouse left and right to look along the shelf, and try looking to the side of a bottle to read it.
+                You have 25 seconds.</p>
+                <p class="cq-keys">Mouse: move to look, click a bottle to pick it.<br>
+                Keyboard: Left and Right arrows to look, Tab to go to a bottle, Enter to pick it.</p>
+                <button id="startMacularBtn" onclick="startTask()">Start</button>
+            </div>
+        </div>
+
+    <svg width="0" height="0" style="position:absolute">
+        <filter id="metamorphWarp" x="-20%" y="-20%" width="140%" height="140%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="2" seed="7" result="warpNoise" />
+            <feDisplacementMap in="SourceGraphic" in2="warpNoise" scale="24" xChannelSelector="R" yChannelSelector="G" />
+        </filter>
+        
+        <filter id="scotomaEdge" x="-30%" y="-30%" width="160%" height="160%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="2" seed="12" result="edgeNoise" />
+            <feDisplacementMap in="SourceGraphic" in2="edgeNoise" scale="45" xChannelSelector="R" yChannelSelector="G" />
+        </filter>
+    </svg>
+
+        <!-- All three reflection stages use this same part of the game box. -->
+        <div class="cq-reflect" id="reflectionSection" style="display:none;">
+            <div id="stage1">
+                <h3>Reflection 1 of 3: Your thoughts</h3>
+                <p id="resultMessage" class="cq-result"></p>
+                <div class="cq-ask">
+                    <div class="cq-bubble">
+                        <p class="cq-name">Auntie Lim</p>
+                        <p>The spot I look straight at is the one I can't see, so I have learned to look a little to the side.</p>
+                        <p><label for="reflectionInput"><strong>How did losing the middle of your view change the way you searched?</strong></label></p>
+                        <textarea id="reflectionInput" placeholder="Type your answer here..."></textarea>
+                        <button id="submitReflection">Next</button>
+                    </div>
+                </div>
+            </div>
+            <div id="stage2" hidden></div>
+            <div id="stage3" hidden></div>
+        </div>
+    </div>
+
+    </div>
+
+    <script src="carequest_shared.js"></script>
+    <script src="carequest_world.js"></script>
+    <script>
+        const medicineShelf = document.getElementById('shelfContent');
+        const sceneFrame = document.getElementById('simFrame');
+        const timerDisplay = document.getElementById('timerWidget');
+        const reflectionElement = document.getElementById('reflectionSection');
+        const resultDisplay = document.getElementById('resultMessage');
+        const centralMask = document.getElementById('occlusionMask');
+        const startCard = document.getElementById('startOverlay');
+        const blurMask = document.getElementById('peripheralBlurMask');
+        const blurredShelf = document.getElementById('peripheralBlurContent');
+        const distortionMask = document.getElementById('metamorphRing');
+        const distortedShelf = document.getElementById('metamorphRingContent');
+        const medicineLabels = [
+          "Ibuprofen 200mg",
+          "Metformin 850mg",
+          "Vitamin D3",
+          "Paracetamol 500mg",
+          "Amoxicillin 500mg",
+          "Aspirin 75mg",
+          "Loratadine 10mg",
+          "Omeprazole 20mg"
+        ];
+        const targetMedicine = "Amoxicillin 500mg";
+        const bottleColours = [
+          '#d68c3a',
+          '#c0785a',
+          '#8e9aab',
+          '#5c8a72',
+          '#b06a9e',
+          '#4f7cac',
+          '#c9a227',
+          '#95a5a6'
+        ];
+        let isTaskActive = false;
+        let taskStartedAt = null;
+        const TASK_DURATION_SECONDS = 25;
+        sceneFrame.style.setProperty('--occlusion-radius-x', '210px');
+        sceneFrame.style.setProperty('--occlusion-radius-y', '150px');
+        function toggleHighContrast() {
+          CQ.toggleHighContrast();
+        }
+        CQ.applyHighContrast();
+        
+        // Build the clickable shelf first; the other two shelves are visual copies only.
+        function populateMedicineShelf() {
+          medicineShelf.innerHTML = "";
+          const shelfBoard = document.createElement('div');
+          shelfBoard.className = 'shelfBoard';
+          medicineShelf.appendChild(shelfBoard);
+          medicineLabels.forEach((label, i) => {
+            const div = document.createElement('div');
+            div.className = 'bottle';
+            const cap = document.createElement('div');
+            cap.className = 'cap';
+            const body = document.createElement('div');
+            body.className = 'body';
+            body.style.background = bottleColours[i % bottleColours.length];
+            const bottleLabel = document.createElement('div');
+            bottleLabel.className = 'label';
+            bottleLabel.textContent = label;
+            body.appendChild(bottleLabel);
+            div.appendChild(cap);
+            div.appendChild(body);
+            div.addEventListener('click', () => selectMedicine(label));
+            div.setAttribute('tabindex', '0');
+            div.setAttribute('role', 'button');
+            div.setAttribute('aria-label', 'Medicine bottle ' + (i + 1) + ' of ' + medicineLabels.length);
+            div.addEventListener('keydown', event => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                selectMedicine(label);
+              }
+            });
+            div.addEventListener('focus', () => centreOnBottle(div));
+            medicineShelf.appendChild(div);
+          });
+          const halfPanRange = (SHELF_WIDTH - sceneFrame.clientWidth) / 2;
+          blurredShelf.innerHTML = medicineShelf.innerHTML;
+          distortedShelf.innerHTML = medicineShelf.innerHTML;
+          moveShelfLayers(-halfPanRange);
+        }
+        let shelfOffset = 0;
+        
+        // All three shelf layers need the same offset or the blur and distortion will drift.
+        function moveShelfLayers(x) {
+          const halfPanRange = (SHELF_WIDTH - sceneFrame.clientWidth) / 2;
+          shelfOffset = Math.max(-2 * halfPanRange, Math.min(0, x));
+          const t = `translateX(${shelfOffset}px)`;
+          medicineShelf.style.transform = t;
+          blurredShelf.style.transform = t;
+          distortedShelf.style.transform = t;
+        }
+        
+        // Undo browser scrolling before centring the focused bottle under the fixed mask.
+        function centreOnBottle(bottle) {
+          sceneFrame.scrollLeft = 0;
+          sceneFrame.scrollTop = 0;
+          const centre = bottle.offsetLeft + bottle.offsetWidth / 2;
+          moveShelfLayers(sceneFrame.clientWidth / 2 - centre);
+        }
+        const KEYBOARD_PAN_STEP = 40;
+        document.addEventListener('keydown', event => {
+          if (!isTaskActive) {
+            return;
+          }
+          if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+            event.preventDefault();
+            moveShelfLayers(shelfOffset + (event.key === 'ArrowRight' ? -KEYBOARD_PAN_STEP : KEYBOARD_PAN_STEP));
+          }
+        });
+        
+        // Only enable bottle selection and the visual effects after Start.
+        function startTask() {
+          if (isTaskActive) {
+            return;
+          }
+          isTaskActive = true;
+          startCard.style.display = 'none';
+          centralMask.classList.add('active');
+          blurMask.classList.add('active');
+          distortionMask.classList.add('active');
+          medicineShelf.inert = false;
+          sceneFrame.focus({
+            preventScroll: true
+          });
+          taskStartedAt = Date.now();
+          updateTaskTimer();
+        }
+        
+        // The first bottle picked ends the task, whether it is right or wrong.
+        function selectMedicine(label) {
+          if (!isTaskActive) {
+            return;
+          }
+          isTaskActive = false;
+          const elapsedSeconds = ((Date.now() - taskStartedAt) / 1000).toFixed(1);
+          if (label === targetMedicine) {
+            resultDisplay.textContent = `Correct bottle found in ${elapsedSeconds}s.`;
+          } else {
+            resultDisplay.textContent = `Wrong bottle selected ("${label}") after ${elapsedSeconds}s. In a real search, this is exactly the kind of mistake central vision loss causes.`;
+          }
+          CQ.showReflection();
+        }
+        
+        // The shelf is wider than the view, so looking left and right moves it underneath the mask.
+        const SHELF_WIDTH = 1300;
+        const PAN_SENSITIVITY = 1.6;
+        sceneFrame.addEventListener('mousemove', event => {
+          if (!isTaskActive) {
+            return;
+          }
+          const rect = sceneFrame.getBoundingClientRect();
+          const dx = event.clientX - rect.left - rect.width / 2;
+          const halfPanRange = (SHELF_WIDTH - rect.width) / 2;
+          const nextShelfOffset = -dx * PAN_SENSITIVITY - halfPanRange;
+          moveShelfLayers(nextShelfOffset);
+        });
+        
+        // Use elapsed time for the countdown and stop when the task is no longer active.
+        function updateTaskTimer() {
+          if (!isTaskActive) {
+            return;
+          }
+          const elapsedSeconds = (Date.now() - taskStartedAt) / 1000;
+          const remainingSeconds = Math.max(0, TASK_DURATION_SECONDS - elapsedSeconds);
+          timerDisplay.textContent = `Time Left: ${remainingSeconds.toFixed(1)}s`;
+          if (remainingSeconds <= 0) {
+            isTaskActive = false;
+            resultDisplay.textContent = "Time ran out before the target was found.";
+            CQ.showReflection();
+            return;
+          }
+          requestAnimationFrame(updateTaskTimer);
+        }
+        
+        // Practical tips are based on Macular Society guides; keeping things in place is Auntie Lim's request.
+        CQ.setupReflection({
+          key: 'macular',
+          npc: 'auntie',
+          video: {
+            id: 'Cb58xLev3I4',
+            title: 'See What I See: AMD Virtual Reality Experience',
+            credit: 'National Eye Institute, NIH, on YouTube',
+            intro: 'A short simulation made by the US National Eye Institute of how age-related macular degeneration affects everyday sight. ' + 'It is a 360 degree video, so you can drag inside it to look around.'
+          },
+          coping: [
+            "Now you know why I sometimes pick up the wrong bottle. The one I look straight at is the one I can't see.",
+            "Good light helps me a lot, especially a lamp pointed right at what I'm doing.",
+            "Put an elastic band or a raised coloured sticker on my tablet bottles, so I can tell them apart by feel and by colour.",
+            "I've learned to look a little to the side of things. It sounds strange, but that's how I read the labels now.",
+            "And please don't move my things around. If you have to, tell me where you put them.",
+            "Thank you for your patience, dear. Go on, the others are waiting for you."
+          ]
+        });
+        populateMedicineShelf();
+    </script>
+    <script>
+        // Show the walking room first. The conversation opens the activity.
+        CQWorld.room({
+          key: 'macular',
+          npc: 'auntie',
+          theme: 'macular',
+          canvas: document.getElementById('worldCanvas'),
+          overlay: document.getElementById('worldDialogue'),
+          prompt: document.getElementById('worldPrompt'),
+          world: document.getElementById('world'),
+          activity: document.getElementById('activity'),
+          intro: [
+            "Hello dear, thank you for coming.",
+            "I can see you're there, just not clearly. Not where I'm looking straight at.",
+            "Could you help me find my Amoxicillin on the medicine shelf? The label says Amoxicillin 500mg."
+          ],
+          onStart: () => moveShelfLayers(-(SHELF_WIDTH - sceneFrame.clientWidth) / 2)
+        });
+    </script>
+</body>
+</html>

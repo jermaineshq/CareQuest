@@ -1,0 +1,370 @@
+/* Links and buttons shared by the room pages. */
+.cq-back {
+    display: inline-block;
+    margin-bottom: 10px;
+    font-weight: bold;
+    color: #2c3e50;
+}
+
+body.high-contrast .cq-back {
+    color: #ffff00;
+}
+
+.cq-button-link {
+    display: inline-block;
+    padding: 10px 15px;
+    margin-top: 6px;
+    background: #2980b9;
+    color: #fff;
+    font-weight: bold;
+    text-decoration: none;
+    border-radius: 6px;
+}
+
+body.high-contrast .cq-button-link {
+    background: #fff;
+    color: #000;
+}
+
+/* Keep a clear outline when someone uses the keyboard. */
+:focus-visible {
+    outline: 3px solid #e67e22;
+    outline-offset: 3px;
+}
+
+body.high-contrast :focus-visible {
+    outline: 3px solid #ffff00;
+}
+
+/* Put the portrait next to the speech bubble. */
+.cq-dialogue {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    max-width: 700px;
+    margin: 10px 0;
+}
+
+.cq-portrait {
+    flex: none;
+    image-rendering: pixelated;
+    background: #fdf2e0;
+    border: 3px solid #2d2d2d;
+    border-radius: 6px;
+}
+
+body.high-contrast .cq-portrait {
+    background: #222;
+    border-color: #fff;
+}
+
+.cq-bubble {
+    position: relative;
+    flex: 1;
+    background: #fff;
+    border: 2px solid #2d2d2d;
+    border-radius: 10px;
+    padding: 10px 14px 12px;
+}
+
+/* The border makes the small pointer on the bubble. */
+.cq-bubble::before {
+    content: "";
+    position: absolute;
+    left: -10px;
+    top: 20px;
+    border-width: 8px 10px 8px 0;
+    border-style: solid;
+    border-color: transparent #2d2d2d transparent transparent;
+}
+
+body.high-contrast .cq-bubble {
+    background: #000;
+    color: #fff;
+    border-color: #fff;
+}
+
+body.high-contrast .cq-bubble::before {
+    border-color: transparent #fff transparent transparent;
+}
+
+.cq-name {
+    margin: 0 0 4px;
+    font-weight: bold;
+}
+
+.cq-line {
+    margin: 0 0 10px;
+    font-size: 16px;
+    line-height: 1.45;
+    min-height: 3em;
+}
+
+.cq-counter {
+    font-size: 12px;
+    color: #666;
+    margin-right: 10px;
+}
+
+body.high-contrast .cq-counter {
+    color: #ccc;
+}
+
+/* Keep the video shape when the page gets narrower. */
+.cq-video {
+    position: relative;
+    width: 100%;
+    max-width: 640px;
+    aspect-ratio: 16 / 9;
+    background: #000;
+}
+
+.cq-video iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+}
+
+.cq-credit {
+    font-size: 13px;
+    color: #555;
+}
+
+body.high-contrast .cq-credit {
+    color: #ddd;
+}
+
+body.high-contrast a {
+    color: #ffff00;
+}
+
+/* The toolbar, activity and reflection fit inside one game box. */
+.cq-gamebox {
+    position: relative;
+    width: 960px;
+    max-width: 100%;
+    border: 3px solid #2d2d2d;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #ffffff;
+    margin-bottom: 14px;
+}
+
+body.high-contrast .cq-gamebox {
+    border-color: #ffffff;
+    background: #000000;
+}
+
+.cq-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 6px 10px;
+    background: #2d2d2d;
+    color: #ffffff;
+}
+
+.cq-toolbar .cq-title {
+    font-size: 17px;
+    margin: 0 auto 0 0;
+}
+
+.cq-toolbar a, .cq-toolbar button {
+    font-size: 13px;
+    font-weight: bold;
+    padding: 6px 10px;
+    border-radius: 4px;
+    border: 1px solid #ffffff;
+    background: transparent;
+    color: #ffffff;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.cq-toolbar button:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.cq-toolbar .cq-progress {
+    font-size: 13px;
+    font-weight: bold;
+}
+
+body.high-contrast .cq-toolbar {
+    background: #000000;
+    border-bottom: 2px solid #ffffff;
+}
+
+body.high-contrast .cq-toolbar a, body.high-contrast .cq-toolbar button {
+    color: #ffff00;
+    border-color: #ffff00;
+    background: #000000;
+}
+
+.cq-play {
+    position: relative;
+}
+
+/* Instructions cover the play area until the user starts. */
+.cq-card {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 20px;
+    text-align: center;
+    background: rgba(15, 15, 20, 0.9);
+    color: #ffffff;
+}
+
+.cq-card h2 {
+    margin: 0;
+    font-size: 22px;
+}
+
+.cq-card p {
+    margin: 0;
+    max-width: 600px;
+    font-size: 16px;
+    line-height: 1.45;
+}
+
+.cq-card .cq-keys {
+    font-size: 14px;
+    color: #d0d0d0;
+}
+
+.cq-card .cq-warn {
+    font-size: 14px;
+    color: #ffd27a;
+}
+
+.cq-card button {
+    font-size: 17px;
+    font-weight: bold;
+    padding: 10px 26px;
+    cursor: pointer;
+}
+
+/* The hidden attribute must still win over display flex. */
+.cq-card[hidden] {
+    display: none;
+}
+
+body.high-contrast .cq-card {
+    background: #000000;
+}
+
+body.high-contrast .cq-card .cq-keys, body.high-contrast .cq-card .cq-warn {
+    color: #ffff00;
+}
+
+/* The reflection uses the space where the task was. */
+.cq-reflect {
+    padding: 14px 18px 18px;
+}
+
+.cq-reflect h3 {
+    margin: 0 0 8px;
+}
+
+.cq-reflect textarea {
+    width: 100%;
+    height: 90px;
+    margin: 8px 0;
+    box-sizing: border-box;
+    font: inherit;
+}
+
+.cq-reflect .cq-video {
+    max-width: 560px;
+}
+
+.cq-ask .cq-bubble p {
+    margin: 0 0 8px;
+}
+
+.cq-result {
+    font-weight: bold;
+    margin: 0 0 8px;
+}
+
+/* Scale the map up but keep the pixel edges sharp. */
+.cq-stage {
+    position: relative;
+    width: 100%;
+}
+
+.cq-stage > canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    background: #141414;
+}
+
+.cq-stage > canvas:focus-visible {
+    outline: 3px solid #e67e22;
+    outline-offset: -3px;
+}
+
+/* Show conversations over the bottom of the map. */
+.cq-overlay {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    background: rgba(20, 20, 20, 0.55);
+    border-radius: 10px;
+    padding: 8px 12px;
+}
+
+.cq-overlay .cq-dialogue {
+    max-width: none;
+    margin: 0;
+}
+
+/* Prompts and key reminders sit below the map. */
+.cq-hud {
+    background: #2d2d2d;
+    color: #ffffff;
+    padding: 6px 12px 8px;
+}
+
+.cq-prompt {
+    font-weight: bold;
+    min-height: 1.4em;
+    margin: 0;
+}
+
+.cq-controls {
+    font-size: 13px;
+    color: #cfcfcf;
+    margin: 2px 0 0;
+}
+
+body.high-contrast .cq-hud {
+    background: #000000;
+    border-top: 2px solid #ffffff;
+}
+
+body.high-contrast .cq-prompt {
+    color: #ffff00;
+}
+
+body.high-contrast .cq-controls {
+    color: #ffffff;
+}
+
+body.high-contrast .cq-stage > canvas, body.high-contrast #shopCanvas {
+    filter: contrast(1.6) saturate(1.4);
+}

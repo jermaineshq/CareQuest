@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CareQuest - Advanced Motor Simulation</title>
+    <link rel="stylesheet" href="carequest_shared.css">
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+            background: #f0f0f0;
+            color: #333;
+            user-select: none;
+        }
+
+        body.high-contrast {
+            background: #000000;
+            color: #ffffff;
+        }
+
+        body.high-contrast #gameCanvas {
+            background: #000000;
+        }
+
+        body.high-contrast button {
+            background: #fff;
+            color: #000;
+        }
+
+        /* The game draws its own hand marker, so hide the normal cursor here. */
+        #gameCanvas {
+            background: #ffffff;
+            display: block;
+            margin: 0 auto;
+            cursor: none;
+        }
+
+        button {
+            padding: 10px 15px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        textarea {
+            width: 100%;
+            max-width: 950px;
+            height: 100px;
+            margin-top: 10px;
+        }
+
+        /* Keep the status and countdown side by side. */
+        .telemetry-container {
+            display: flex;
+            max-width: 950px;
+            gap: 10px;
+            padding: 8px;
+        }
+
+        /* Long status messages stay within the panel. */
+        #symptomTracker {
+            font-family: monospace;
+            font-size: 14px;
+            font-weight: bold;
+            padding: 10px;
+            background: #eaeaea;
+            border-left: 5px solid #7f8c8d;
+            flex-grow: 1;
+            height: 20px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+        }
+
+        #timerWidget {
+            font-family: monospace;
+            font-size: 14px;
+            font-weight: bold;
+            padding: 10px;
+            background: #eaeaea;
+            border-left: 5px solid #2980b9;
+            width: 140px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        body.high-contrast #symptomTracker, body.high-contrast #timerWidget {
+            background: #222;
+            border-left: 5px solid #fff;
+            color: #fff;
+        }
+
+        .status-alert {
+            color: #6c3483;
+            background: #f5eef8 !important;
+            border-left: 5px solid #8e44ad !important;
+        }
+
+        .status-danger {
+            color: #c0392b;
+            background: #fadbd8 !important;
+            border-left: 5px solid #c0392b !important;
+            font-weight: bold;
+        }
+
+        body.high-contrast .status-alert {
+            color: #ffaa00;
+            background: #221100 !important;
+        }
+
+        body.high-contrast .status-danger {
+            color: #ff4d4d;
+            background: #220000 !important;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Start in the walking scene before opening the room activity. -->
+    <section id="world" class="cq-gamebox" aria-label="Grandpa Lim's room">
+        <div class="cq-toolbar">
+            <h1 class="cq-title">Grandpa Lim's room</h1>
+            <a href="hallway.html">&larr; Hallway</a>
+            <button onclick="CQ.toggleHighContrast()">High contrast</button>
+        </div>
+        <div class="cq-stage">
+            <canvas id="worldCanvas" width="320" height="176" tabindex="0"
+                aria-label="Pixel art room with a bed, a kitchen, a sofa and a round table with a cup of water on it. Grandpa Lim stands by the table. The prompt below the map describes what is next to you."></canvas>
+            <div id="worldDialogue" class="cq-overlay" hidden></div>
+        </div>
+        <div class="cq-hud">
+            <p id="worldPrompt" class="cq-prompt" aria-live="polite"></p>
+            <p class="cq-controls">WASD or arrow keys: move. Enter: talk. Red mat + Enter: back to the hallway.</p>
+        </div>
+    </section>
+
+    <!-- The conversation reveals this activity. It stays hidden at first. -->
+    <div id="activity" hidden>
+    
+    <div class="cq-gamebox">
+        <div class="cq-toolbar">
+            <h1 class="cq-title">Grandpa Lim's cup</h1>
+            <a href="hallway.html">&larr; Hallway</a>
+            <button onclick="toggleHighContrast()">High contrast</button>
+            
+            <button id="skipBtn" onclick="skipTask()">Skip task</button>
+        </div>
+
+        <div class="cq-play">
+            <div class="telemetry-container">
+                <div id="symptomTracker">Pick up the cup.</div>
+                <div id="timerWidget">Time Left: 30.0s</div>
+            </div>
+
+            <canvas id="gameCanvas" width="950" height="350" tabindex="0"
+                aria-label="Motor task area. Space picks up or puts down the cup, arrow keys move your hand."></canvas>
+
+            <div id="introCard" class="cq-card">
+                <h2>Carry Grandpa Lim's cup to his bedside table</h2>
+                <p>His hand shakes more near the table and the longer he holds the cup, and it moves a moment after you do.
+                Move slowly: a sudden jerk spills the water. You have 30 seconds.</p>
+                <p class="cq-keys">Mouse: click the cup to pick it up, click again to put it down.<br>
+                Keyboard: Space to pick up or put down, arrow keys to move.</p>
+                <button id="startMotorBtn" onclick="startMotor()">Start</button>
+            </div>
+        </div>
+
+        <!-- All three reflection stages use this same part of the game box. -->
+        <div class="cq-reflect" id="reflectionSection" style="display:none;">
+            <div id="stage1">
+                <h3>Reflection 1 of 3: Your thoughts</h3>
+                <p id="skipNote" class="cq-result" hidden>You skipped the task. That's okay.</p>
+                <div class="cq-ask">
+                    <div class="cq-bubble">
+                        <p class="cq-name">Grandpa Lim</p>
+                        <p>That's what my hands are like most days.</p>
+                        <p><label for="reflectionInput"><strong>How did it feel when the cup wouldn't go where you wanted it to?</strong></label></p>
+                        <textarea id="reflectionInput" placeholder="Type your answer here..."></textarea>
+                        <button id="submitReflection">Next</button>
+                    </div>
+                </div>
+            </div>
+            <div id="stage2" hidden></div>
+            <div id="stage3" hidden></div>
+        </div>
+    </div>
+    </div>
+
+    <script src="carequest_shared.js"></script>
+    <script src="carequest_world.js"></script>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const drawingContext = canvas.getContext('2d');
+        const statusDisplay = document.getElementById('symptomTracker');
+        const timerDisplay = document.getElementById('timerWidget');
+        let bedsideTable = {
+          x: 780,
+          y: 120,
+          width: 100,
+          height: 120
+        };
+        let waterCup = {
+          x: 80,
+          y: 180,
+          radius: 18,
+          isAttachedToMouse: false
+        };
+        let pointerX = 80;
+        let pointerY = 180;
+        let previousPointerX = 80;
+        let previousPointerY = 180;
+        let pointerSpeed = 0;
+        let lastPointerMoveAt = Date.now();
+        let isTaskActive = true;
+        let carriedFrames = 0;
+        let stillnessFrames = 0;
+        let isPointerInside = false;
+        const INPUT_DELAY_MS = 500;
+        
+        // Keep timed pointer samples so the cup follows the input half a second late.
+        let pointerSamples = [];
+        let delayedPointerX = 80;
+        let delayedPointerY = 180;
+        
+        // Keep the newest sample old enough for the delay, even when clearing earlier ones.
+        function updateLaggedPointer() {
+          const oldestUsableTime = Date.now() - INPUT_DELAY_MS;
+          while (pointerSamples.length > 1 && pointerSamples[1].t <= oldestUsableTime) {
+            pointerSamples.shift();
+          }
+          if (pointerSamples.length > 0 && pointerSamples[0].t <= oldestUsableTime) {
+            delayedPointerX = pointerSamples[0].x;
+            delayedPointerY = pointerSamples[0].y;
+          }
+        }
+        
+        // Box-Muller gives mostly small shakes, with the occasional larger one.
+        function sampleGaussian() {
+          let u = 0;
+          let v = 0;
+          while (u === 0) {
+            u = Math.random();
+          }
+          while (v === 0) {
+            v = Math.random();
+          }
+          return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+        }
+        const TASK_DURATION_SECONDS = 30;
+        let taskStartedAt = null;
+        let elapsedTaskSeconds = 0;
+        let failureMessage = "";
+        let feedbackFramesRemaining = 0;
+        let savedStatusText = "";
+        let savedStatusClass = "";
+        function toggleHighContrast() {
+          CQ.toggleHighContrast();
+        }
+        CQ.applyHighContrast();
+        canvas.addEventListener('mouseenter', () => {
+          isPointerInside = true;
+        });
+        canvas.addEventListener('mouseleave', () => {
+          isPointerInside = false;
+        });
+        
+        // Mouse and keyboard input both come here, so they use the same spill rules.
+        function recordPointerPosition(x, y) {
+          previousPointerX = pointerX;
+          previousPointerY = pointerY;
+          pointerX = x;
+          pointerY = y;
+          pointerSpeed = Math.sqrt((pointerX - previousPointerX) ** 2 + (pointerY - previousPointerY) ** 2);
+          lastPointerMoveAt = Date.now();
+          pointerSamples.push({
+            t: Date.now(),
+            x: pointerX,
+            y: pointerY
+          });
+        }
+        canvas.addEventListener('mousemove', event => {
+          const rect = canvas.getBoundingClientRect();
+          recordPointerPosition(event.clientX - rect.left, event.clientY - rect.top);
+        });
+        canvas.addEventListener('mousedown', () => toggleCupGrip());
+        const KEYBOARD_MOVE_STEP = 2.5;
+        
+        // Held arrow keys move the hand a little on each frame.
+        const pressedArrowKeys = {
+          ArrowUp: false,
+          ArrowDown: false,
+          ArrowLeft: false,
+          ArrowRight: false
+        };
+        let isCanvasFocused = false;
+        canvas.addEventListener('focus', () => {
+          isCanvasFocused = true;
+        });
+        canvas.addEventListener('blur', () => {
+          isCanvasFocused = false;
+          Object.keys(pressedArrowKeys).forEach(k => pressedArrowKeys[k] = false);
+        });
+        canvas.addEventListener('keydown', event => {
+          if (event.key in pressedArrowKeys) {
+            pressedArrowKeys[event.key] = true;
+            event.preventDefault();
+          } else if (event.key === ' ' || event.key === 'Enter') {
+            event.preventDefault();
+            if (event.repeat) {
+              return;
+            }
+            if (!waterCup.isAttachedToMouse) {
+              recordPointerPosition(waterCup.x, waterCup.y);
+            }
+            toggleCupGrip();
+          }
+        });
+        canvas.addEventListener('keyup', event => {
+          if (event.key in pressedArrowKeys) {
+            pressedArrowKeys[event.key] = false;
+          }
+        });
+        function movePointerWithKeyboard() {
+          let dx = 0;
+          let dy = 0;
+          if (pressedArrowKeys.ArrowLeft) {
+            dx -= KEYBOARD_MOVE_STEP;
+          }
+          if (pressedArrowKeys.ArrowRight) {
+            dx += KEYBOARD_MOVE_STEP;
+          }
+          if (pressedArrowKeys.ArrowUp) {
+            dy -= KEYBOARD_MOVE_STEP;
+          }
+          if (pressedArrowKeys.ArrowDown) {
+            dy += KEYBOARD_MOVE_STEP;
+          }
+          if (dx !== 0 || dy !== 0) {
+            const x = Math.max(0, Math.min(canvas.width, pointerX + dx));
+            const y = Math.max(0, Math.min(canvas.height, pointerY + dy));
+            recordPointerPosition(x, y);
+          }
+        }
+        let hasStarted = false;
+        function startMotor() {
+          hasStarted = true;
+          document.getElementById('introCard').hidden = true;
+          canvas.focus({
+            preventScroll: true
+          });
+        }
+        
+        // Picking up the cup also resets its input history so old movements are not replayed.
+        function toggleCupGrip() {
+          if (!isTaskActive || !hasStarted) {
+            return;
+          }
+          if (!waterCup.isAttachedToMouse) {
+            let pointerDistance = Math.sqrt((pointerX - waterCup.x) ** 2 + (pointerY - waterCup.y) ** 2);
+            if (pointerDistance < waterCup.radius) {
+              waterCup.isAttachedToMouse = true;
+              waterCup.x = pointerX;
+              waterCup.y = pointerY;
+              previousPointerX = pointerX;
+              previousPointerY = pointerY;
+              pointerSpeed = 2.0;
+              lastPointerMoveAt = Date.now();
+              carriedFrames = 0;
+              stillnessFrames = 0;
+              savedStatusText = "";
+              savedStatusClass = "";
+              pointerSamples = [{
+                t: Date.now() - INPUT_DELAY_MS,
+                x: pointerX,
+                y: pointerY
+              }];
+              delayedPointerX = pointerX;
+              delayedPointerY = pointerY;
+              if (!taskStartedAt) {
+                taskStartedAt = Date.now() - elapsedTaskSeconds * 1000;
+              }
+            }
+          } else {
+            waterCup.isAttachedToMouse = false;
+          }
+        }
+        let wasSkipped = false;
+        function skipTask() {
+          if (!isTaskActive) {
+            return;
+          }
+          if (!confirm('Skip the cup task and go to the reflection?')) {
+            return;
+          }
+          wasSkipped = true;
+          isTaskActive = false;
+          waterCup.isAttachedToMouse = false;
+          CQ.save('carequest_motor_skipped', 'true');
+          statusDisplay.innerText = "Task skipped.";
+          statusDisplay.className = "";
+          document.getElementById('skipBtn').disabled = true;
+          document.getElementById('skipNote').hidden = false;
+          CQ.showReflection();
+        }
+        const CUP_PIXEL_SIZE = 4;
+        
+        // The cup uses a letter grid too, with each letter drawn as a four-pixel square.
+        const CUP_PIXEL_ROWS = [
+          'kkkkkkk..',
+          'kbbbbbkkk',
+          'khwwwwk.k',
+          'khwwwwk.k',
+          'khwwwwkkk',
+          'kwwwwwk..',
+          'kwwwwwk..',
+          '.kkkkk...',
+          '.........'
+        ];
+        
+        // Keep the cup drawing centred on the same position used by the collision checks.
+        function paintCup(cx, cy, held, hc) {
+          const palette = hc ? {
+            k: '#ffffff',
+            b: '#0000ff',
+            w: '#00ffff',
+            h: '#00ffff'
+          } : {
+            k: held ? '#c0392b' : '#2d2d2d',
+            b: '#3498db',
+            w: '#ffffff',
+            h: '#d6eaf8'
+          };
+          const originX = Math.round(cx - waterCup.radius);
+          const originY = Math.round(cy - waterCup.radius);
+          CUP_PIXEL_ROWS.forEach((row, y) => {
+            for (let x = 0; x < row.length; x++) {
+              const column = palette[row[x]];
+              if (!column) {
+                continue;
+              }
+              drawingContext.fillStyle = column;
+              drawingContext.fillRect(originX + x * CUP_PIXEL_SIZE, originY + y * CUP_PIXEL_SIZE, CUP_PIXEL_SIZE, CUP_PIXEL_SIZE);
+            }
+          });
+        }
+        function paintBedsideTable(hc) {
+          const {
+            x,
+            y,
+            width: w,
+            height: h
+          } = bedsideTable;
+          const c = hc ? {
+            edge: '#ffffff',
+            wood: '#000000',
+            line: '#555555',
+            rim: '#ffffff',
+            tray: '#333333',
+            label: '#ffffff'
+          } : {
+            edge: '#5c3a1a',
+            wood: '#8b5a2b',
+            line: '#7a4f2c',
+            rim: '#95a5a6',
+            tray: '#ecf0f1',
+            label: '#333333'
+          };
+          drawingContext.fillStyle = c.edge;
+          drawingContext.fillRect(x, y, w, h);
+          drawingContext.fillStyle = c.wood;
+          drawingContext.fillRect(x + CUP_PIXEL_SIZE, y + CUP_PIXEL_SIZE, w - 2 * CUP_PIXEL_SIZE, h - 2 * CUP_PIXEL_SIZE);
+          drawingContext.fillStyle = c.line;
+          for (let playerY = y + 4 * CUP_PIXEL_SIZE; playerY < y + h - CUP_PIXEL_SIZE; playerY += 4 * CUP_PIXEL_SIZE) {
+            drawingContext.fillRect(x + CUP_PIXEL_SIZE, playerY, w - 2 * CUP_PIXEL_SIZE, CUP_PIXEL_SIZE);
+          }
+          drawingContext.fillStyle = c.rim;
+          drawingContext.fillRect(x + 3 * CUP_PIXEL_SIZE, y + 4 * CUP_PIXEL_SIZE, w - 6 * CUP_PIXEL_SIZE, h - 8 * CUP_PIXEL_SIZE);
+          drawingContext.fillStyle = c.tray;
+          drawingContext.fillRect(x + 4 * CUP_PIXEL_SIZE, y + 5 * CUP_PIXEL_SIZE, w - 8 * CUP_PIXEL_SIZE, h - 10 * CUP_PIXEL_SIZE);
+          drawingContext.fillStyle = c.label;
+          drawingContext.font = 'bold 13px sans-serif';
+          drawingContext.fillText('Bedside table', x + 4, y - 8);
+        }
+        
+        // A failed attempt resets the cup and timer, then briefly shows the reason.
+        function resetCupAttempt(reason, statusMessage, statusStyle) {
+          waterCup.x = 80;
+          waterCup.y = 180;
+          waterCup.isAttachedToMouse = false;
+          carriedFrames = 0;
+          stillnessFrames = 0;
+          pointerSpeed = 0;
+          taskStartedAt = null;
+          elapsedTaskSeconds = 0;
+          failureMessage = reason;
+          feedbackFramesRemaining = 150;
+          savedStatusText = statusMessage;
+          savedStatusClass = statusStyle;
+          timerDisplay.innerText = `Time Left: ${TASK_DURATION_SECONDS}.0s`;
+        }
+        
+        // Keep the original frame order: timer, movement, feedback, drawing, then the drop check.
+        function updateSimulationFrame() {
+          drawingContext.clearRect(0, 0, canvas.width, canvas.height);
+          const highContrastEnabled = document.body.classList.contains('high-contrast');
+          if (isCanvasFocused) {
+            movePointerWithKeyboard();
+          }
+          let remainingSeconds = TASK_DURATION_SECONDS;
+          if (isTaskActive && taskStartedAt && waterCup.isAttachedToMouse) {
+            elapsedTaskSeconds = (Date.now() - taskStartedAt) / 1000;
+            remainingSeconds = Math.max(0, TASK_DURATION_SECONDS - elapsedTaskSeconds);
+            timerDisplay.innerText = `Time Left: ${remainingSeconds.toFixed(1)}s`;
+            if (remainingSeconds <= 0) {
+              resetCupAttempt("Assessment Timeout! (Exceeded 30-second limit)", "[!] Out of time", "status-danger");
+            }
+          }
+          paintBedsideTable(highContrastEnabled);
+          let statusText = "Holding the cup. Move slowly.";
+          let statusClass = "";
+          let cursorX = pointerX;
+          let cursorY = pointerY;
+          if (waterCup.isAttachedToMouse && isTaskActive) {
+            carriedFrames += 1;
+            let idleMilliseconds = Date.now() - lastPointerMoveAt;
+            if (idleMilliseconds > 100) {
+              pointerSpeed = 0;
+            }
+            if (pointerSpeed > 5) {
+              resetCupAttempt("Water Spilled! (Moved too fast / sudden jerk)", "[!] Water spilled: sudden movement", "status-danger");
+            }
+            if (isTaskActive && waterCup.isAttachedToMouse) {
+              if (pointerSpeed < 0.5) {
+                stillnessFrames += 1.8;
+                statusText = "⚠️ Static posture detected. Shaking is amplifying.";
+                statusClass = "status-alert";
+              } else {
+                stillnessFrames = Math.max(0, stillnessFrames - 3);
+                carriedFrames = Math.max(0, carriedFrames - 0.2);
+                statusText = "Moving the cup. Keep it slow.";
+                statusClass = "";
+              }
+            }
+            updateLaggedPointer();
+            let followRate = Math.max(0.025, 0.075 - carriedFrames * 0.00004);
+            let followX = waterCup.x + (delayedPointerX - waterCup.x) * followRate;
+            let followY = waterCup.y + (delayedPointerY - waterCup.y) * followRate;
+            let tableCentreX = bedsideTable.x + bedsideTable.width / 2;
+            let tableCentreY = bedsideTable.y + bedsideTable.height / 2;
+            let distanceFromTable = Math.sqrt((waterCup.x - tableCentreX) ** 2 + (waterCup.y - tableCentreY) ** 2);
+            let proximityShake = Math.max(2, 12 - distanceFromTable / 55);
+            let fatigueShake = Math.max(0, carriedFrames * 0.004);
+            let stillnessShake = Math.min(18, stillnessFrames * 0.35);
+            let shakeRange = Math.min(32, proximityShake + fatigueShake + stillnessShake);
+            let tremorX = sampleGaussian() * 0.29 * shakeRange;
+            let tremorY = sampleGaussian() * 0.29 * shakeRange;
+            let nearTableScale = distanceFromTable < 250 ? 0.012 : 0.004;
+            let nextX = followX + tremorX * (1 + stillnessShake * nearTableScale);
+            let nextY = followY + tremorY * (1 + stillnessShake * nearTableScale);
+            waterCup.x = waterCup.x + (nextX - waterCup.x) * 0.85;
+            waterCup.y = waterCup.y + (nextY - waterCup.y) * 0.85;
+            let shouldShakeCursor = remainingSeconds <= 15 || pointerSpeed < 0.5;
+            if (shouldShakeCursor) {
+              cursorX = pointerX + tremorX * 0.5;
+              cursorY = pointerY + tremorY * 0.5;
+            } else {
+              cursorX = pointerX;
+              cursorY = pointerY;
+            }
+            if (waterCup.x <= waterCup.radius || waterCup.x >= canvas.width - waterCup.radius || waterCup.y <= waterCup.radius || waterCup.y >= canvas.height - waterCup.radius) {
+              resetCupAttempt("Cup dropped out of bounds!", "Cup dropped out of bounds!", "status-danger");
+            }
+          }
+          if (feedbackFramesRemaining > 0 && savedStatusText !== "") {
+            statusDisplay.innerText = savedStatusText;
+            statusDisplay.className = savedStatusClass;
+          } else if (isTaskActive && waterCup.isAttachedToMouse) {
+            if (stillnessFrames > 15) {
+              statusDisplay.innerText = "⚠️ Static posture detected. Shaking is amplifying.";
+              statusDisplay.className = "status-alert";
+            } else {
+              statusDisplay.innerText = statusText;
+              statusDisplay.className = statusClass;
+            }
+          } else if (isTaskActive && !waterCup.isAttachedToMouse) {
+            statusDisplay.innerText = "Pick up the cup.";
+            statusDisplay.className = "";
+          }
+          paintCup(waterCup.x, waterCup.y, waterCup.isAttachedToMouse, highContrastEnabled);
+          if (isPointerInside || isCanvasFocused) {
+            drawingContext.beginPath();
+            drawingContext.arc(cursorX, cursorY, 12, 0, Math.PI * 2);
+            if (highContrastEnabled) {
+              drawingContext.strokeStyle = '#ffffff';
+              drawingContext.lineWidth = 2;
+              drawingContext.fillStyle = 'rgba(255, 255, 255, 0.2)';
+            } else {
+              drawingContext.strokeStyle = '#333333';
+              drawingContext.lineWidth = 2;
+              drawingContext.fillStyle = 'rgba(0, 0, 0, 0.12)';
+            }
+            drawingContext.fill();
+            drawingContext.stroke();
+            drawingContext.closePath();
+            drawingContext.beginPath();
+            drawingContext.arc(cursorX, cursorY, 1.5, 0, Math.PI * 2);
+            drawingContext.fillStyle = highContrastEnabled ? '#ffffff' : '#333333';
+            drawingContext.fill();
+            drawingContext.closePath();
+          }
+          let isCupOnTable = waterCup.x - waterCup.radius >= bedsideTable.x && waterCup.x + waterCup.radius <= bedsideTable.x + bedsideTable.width && waterCup.y - waterCup.radius >= bedsideTable.y && waterCup.y + waterCup.radius <= bedsideTable.y + bedsideTable.height;
+          if (isTaskActive && !waterCup.isAttachedToMouse && carriedFrames > 0) {
+            if (isCupOnTable) {
+              isTaskActive = false;
+              statusDisplay.innerText = "Done! The cup is on the table.";
+              statusDisplay.className = "";
+              CQ.showReflection();
+            } else {
+              resetCupAttempt("Cup fell off the table! (Not fully within area)", "[!] Missed the table. Put the cup fully on it.", "status-danger");
+            }
+          }
+          if (!isTaskActive) {
+            drawingContext.fillStyle = highContrastEnabled ? '#ffffff' : wasSkipped ? '#7f8c8d' : '#27ae60';
+            drawingContext.font = 'bold 22px sans-serif';
+            drawingContext.fillText(wasSkipped ? 'Task skipped' : 'Object Placed Successfully!', 350, 45);
+          } else if (feedbackFramesRemaining > 0) {
+            drawingContext.fillStyle = highContrastEnabled ? '#ff4d4d' : '#c0392b';
+            drawingContext.font = 'bold 16px sans-serif';
+            drawingContext.fillText(failureMessage, 40, 45);
+            feedbackFramesRemaining--;
+          }
+          requestAnimationFrame(updateSimulationFrame);
+        }
+        
+        // Cup tips are based on IETF, Living with Liquids; the patience line is Grandpa Lim's own request.
+        CQ.setupReflection({
+          key: 'motor',
+          npc: 'lim',
+          video: {
+            id: 'zn1pbKcLhYU',
+            title: "Parkinson's Disease Real Patient's Tremor Exam - Stanford Neurologist",
+            credit: 'Stanford Medicine 25 on YouTube',
+            intro: "A real patient's tremor being examined by a neurologist, filmed by Stanford Medicine 25 for medical teaching. " + "It shows what the shaking looks like from the outside. The task you just did gave you a small taste of how it feels from the inside."
+          },
+          coping: [
+            "Thank you for trying that. Now you know why my morning tea takes so long.",
+            "Here is what helps me. I only fill my cup half way. A full cup spills no matter how careful I am.",
+            "I use a tall mug with straight sides, not a wide cup on a saucer. It sloshes a lot less.",
+            "I hold the mug with my fingers up near the top of the tea, not down at the bottom. It keeps it steadier.",
+            "And the biggest help from family? Patience. Please don't rush me or take the cup away. Ask me first if I want a hand.",
+            "Thank you for visiting me. Go and see how Auntie Lim and Theo are doing."
+          ]
+        });
+        updateSimulationFrame();
+    </script>
+    <script>
+        // Show the walking room first. The conversation opens the activity.
+        CQWorld.room({
+          key: 'motor',
+          npc: 'lim',
+          theme: 'motor',
+          canvas: document.getElementById('worldCanvas'),
+          overlay: document.getElementById('worldDialogue'),
+          prompt: document.getElementById('worldPrompt'),
+          world: document.getElementById('world'),
+          activity: document.getElementById('activity'),
+          intro: [
+            "Ah, you came to visit! Come in, come in.",
+            "Some mornings my hands just won't listen to me.",
+            "Could you carry my cup from the table over to the tray by my bed? Then you'll see what I mean."
+          ]
+        });
+    </script>
+</body>
+</html>

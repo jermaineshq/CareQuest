@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CareQuest - The Hallway</title>
+    <link rel="stylesheet" href="carequest_shared.css">
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        body.high-contrast {
+            background: #000000;
+            color: #ffffff;
+        }
+
+        body.high-contrast button {
+            background: #fff;
+            color: #000;
+        }
+
+        button {
+            padding: 10px 15px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        /* The bar uses the same completed-room count as the text. */
+        #progressBar {
+            width: 120px;
+            height: 12px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Keep the room progress, hallway map and movement hints together. -->
+    <section id="world" class="cq-gamebox" aria-label="The hallway">
+        <div class="cq-toolbar">
+            <h1 class="cq-title">CareQuest: The Hallway</h1>
+            <span class="cq-progress" id="progressText">Rooms completed: 0 / 3</span>
+            <progress id="progressBar" max="3" value="0" aria-hidden="true"></progress>
+            <button onclick="CQ.toggleHighContrast()">High contrast</button>
+            
+            <button onclick="resetProgress()">Reset</button>
+        </div>
+
+        <div class="cq-stage">
+            <canvas id="worldCanvas" width="320" height="176" tabindex="0"
+                aria-label="Pixel art hallway with three doors. Mei the care guide stands at the right end. The prompt below the map describes what is next to you."></canvas>
+            <div id="worldDialogue" class="cq-overlay" hidden></div>
+        </div>
+
+        <div class="cq-hud">
+            <p id="worldPrompt" class="cq-prompt" aria-live="polite"></p>
+            <p class="cq-controls">WASD or arrow keys: move. Enter: talk or go through a door.</p>
+        </div>
+    </section>
+
+    <script src="carequest_shared.js"></script>
+    <script src="carequest_world.js"></script>
+    <script>
+        CQ.applyHighContrast();
+        
+        // These keys match the saved progress for the three rooms.
+        const ROOM_KEYS = [
+          'motor',
+          'macular',
+          'sensory'
+        ];
+        const ROOM_CHARACTERS = {
+          motor: 'Grandpa Lim',
+          macular: 'Auntie Lim',
+          sensory: 'Little Theo'
+        };
+        function countCompletedRooms() {
+          return ROOM_KEYS.filter(k => CQ.load('carequest_' + k + '_done') === 'true').length;
+        }
+        function updateProgressDisplay() {
+          const n = countCompletedRooms();
+          document.getElementById('progressText').textContent = 'Rooms completed: ' + n + ' / 3';
+          document.getElementById('progressBar').value = n;
+        }
+        
+        // Mei changes her reply depending on how many rooms are finished.
+        function getGuideDialogue() {
+          const n = countCompletedRooms();
+          if (n === 0) {
+            return [
+              "Hi, I'm Mei, a care guide. Welcome to CareQuest.",
+              "Three people in this family agreed to show you a small part of their day. Their rooms are behind these doors.",
+              "From the left: Grandpa Lim, Auntie Lim and Little Theo. Stand in front of a door and press Enter to go in.",
+              "Talk to them the same way. Each will ask you to try a short task, then you'll answer a question, watch a short real video and hear what actually helps them.",
+              "Come back and talk to me any time if you need a reminder."
+            ];
+          }
+          if (n < 3) {
+            const remainingCharacters = ROOM_KEYS.filter(k => CQ.load('carequest_' + k + '_done') !== 'true').map(k => ROOM_CHARACTERS[k]);
+            return ["Welcome back. You've finished " + n + " of the 3 rooms.", "Still waiting for you: " + remainingCharacters.join(' and ') + ".", "Stand in front of their door and press Enter when you're ready."];
+          }
+          return [
+            "You've met everyone. Thank you for taking the time.",
+            "Remember, you tried each of these for a few minutes. For them it's every day, and each of them is still very capable.",
+            "The tips they gave you are the part worth taking home. Small changes like a half full cup, a good lamp or a quiet corner make a real difference."
+          ];
+        }
+        
+        // Clear task progress and answers, but leave the contrast preference alone.
+        function resetProgress() {
+          if (!confirm('Clear all progress and saved reflections for the next person?')) {
+            return;
+          }
+          ROOM_KEYS.forEach(k => {
+            [
+              '_done',
+              '_visited',
+              '_reflection',
+              '_skipped'
+            ].forEach(s => {
+              try {
+                localStorage.removeItem('carequest_' + k + s);
+              } catch (event) {}
+            });
+          });
+          try {
+            localStorage.removeItem('carequest_last_room');
+          } catch (event) {}
+          window.location.reload();
+        }
+        updateProgressDisplay();
+        CQWorld.hallway({
+          canvas: document.getElementById('worldCanvas'),
+          overlay: document.getElementById('worldDialogue'),
+          prompt: document.getElementById('worldPrompt'),
+          guideLines: getGuideDialogue,
+          doors: [{
+            key: 'motor',
+            c: 3,
+            name: 'Grandpa Lim',
+            href: 'motor.html'
+          }, {
+            key: 'macular',
+            c: 9,
+            name: 'Auntie Lim',
+            href: 'macular.html'
+          }, {
+            key: 'sensory',
+            c: 15,
+            name: 'Little Theo',
+            href: 'sensory.html'
+          }]
+        });
+    </script>
+</body>
+</html>
