@@ -870,7 +870,7 @@ const CQWorld = function () {
     });
   }
 
-  // Talking to the family member opens their activity; the mat leads back out.
+  // Talking to the family member opens their activity and the mat leads back out.
   function createFamilyRoom(sceneOptions) {
     CQ.save('carequest_last_room', sceneOptions.key);
     const floorRow = 'x' + 'o'.repeat(18) + 'x';
@@ -1059,7 +1059,7 @@ const CQWorld = function () {
     return roomEngine;
   }
 
-  // Only Mum has both this top colour and the red bag.
+  // Only mum has both this top colour and the red bag.
   const MUM_TOP_COLOUR = '#7d5ba6';
   const MUM_BAG_COLOUR = '#e74c3c';
   function paintShopTile(drawingContext, pixelCode, column, row) {
